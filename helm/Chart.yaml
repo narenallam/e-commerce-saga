@@ -1,0 +1,14 @@
+apiVersion: v2
+name: e-commerce-saga
+description: A Helm chart for e-commerce microservices with Saga pattern orchestration
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - microservices
+  - saga
+  - e-commerce
+  - fastapi
+maintainers:
+  - name: Your Name
+    email: your.email@example.com 

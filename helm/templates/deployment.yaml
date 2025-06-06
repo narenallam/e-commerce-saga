@@ -1,0 +1,74 @@
+{{- range $name, $values := .Values.services }}
+{{- if $values.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}-service
+  labels:
+    app: {{ $.Release.Name }}-{{ $name }}-service
+    chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    component: {{ $name }}-service
+spec:
+  replicas: {{ $values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $.Release.Name }}-{{ $name }}-service
+      release: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $.Release.Name }}-{{ $name }}-service
+        release: {{ $.Release.Name }}
+        component: {{ $name }}-service
+    spec:
+      containers:
+        - name: {{ $name }}-service
+          {{- if $.Values.global.imageRegistry }}
+          image: "{{ $.Values.global.imageRegistry }}/{{ $values.image.repository }}:{{ $values.image.tag }}"
+          {{- else }}
+          image: "{{ $values.image.repository }}:{{ $values.image.tag }}"
+          {{- end }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $values.service.port }}
+              protocol: TCP
+          env:
+            - name: MONGO_URI
+              value: {{ $.Values.global.mongodb.uri }}
+            - name: MONGO_DB
+              value: {{ $.Values.global.mongodb.database }}
+            - name: ORDER_SERVICE_URL
+              value: http://{{ $.Release.Name }}-order-service:8000
+            - name: INVENTORY_SERVICE_URL
+              value: http://{{ $.Release.Name }}-inventory-service:8001
+            - name: PAYMENT_SERVICE_URL
+              value: http://{{ $.Release.Name }}-payment-service:8002
+            - name: SHIPPING_SERVICE_URL
+              value: http://{{ $.Release.Name }}-shipping-service:8003
+            - name: NOTIFICATION_SERVICE_URL
+              value: http://{{ $.Release.Name }}-notification-service:8004
+          resources:
+            requests:
+              memory: {{ $values.resources.requests.memory | quote }}
+              cpu: {{ $values.resources.requests.cpu | quote }}
+            limits:
+              memory: {{ $values.resources.limits.memory | quote }}
+              cpu: {{ $values.resources.limits.cpu | quote }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+{{- end }}
+{{- end }} 

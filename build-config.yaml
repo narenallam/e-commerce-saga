@@ -1,0 +1,33 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: order-service:latest
+  source:
+    dockerfile: |
+      FROM python:3.11-slim
+      
+      WORKDIR /app
+      COPY common/requirements.txt ./common/requirements.txt
+      RUN pip install --no-cache-dir -r ./common/requirements.txt
+      COPY common ./common
+      
+      ENV SERVICE_DIR=order
+      ENV PYTHONPATH=/app
+      
+      COPY coordinator /app/coordinator
+      COPY services/order ./services/order
+      
+      WORKDIR /app/services/order
+      
+      EXPOSE 8000
+      
+      CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    type: Dockerfile
+  strategy:
+    type: Docker 

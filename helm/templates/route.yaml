@@ -1,0 +1,28 @@
+{{- range $name, $values := .Values.services }}
+{{- if and $values.enabled $values.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}-service
+  labels:
+    app: {{ $.Release.Name }}-{{ $name }}-service
+    chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+    component: {{ $name }}-service
+spec:
+  {{- if $values.route.host }}
+  host: {{ $values.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ $.Release.Name }}-{{ $name }}-service
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }} 

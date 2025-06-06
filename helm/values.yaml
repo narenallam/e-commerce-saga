@@ -1,0 +1,129 @@
+# Global values
+global:
+  environment: production
+  imagePullPolicy: IfNotPresent
+  imageRegistry: ""  # Will be set at deployment time
+  mongodb:
+    uri: mongodb://e-commerce-saga-mongodb:27017
+    database: ecommerce_saga
+  networkPolicy:
+    enabled: true
+
+# MongoDB
+mongodb:
+  enabled: true
+  image:
+    repository: mongo
+    tag: 4.4
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "300m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+# Microservices configuration
+services:
+  order:
+    enabled: true
+    replicas: 1
+    image:
+      repository: order-service
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 8000
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    route:
+      enabled: true
+      host: ""  # Will be auto-generated if not specified
+    
+  inventory:
+    enabled: true
+    replicas: 1
+    image:
+      repository: inventory-service
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 8001
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    route:
+      enabled: true
+      host: ""  # Will be auto-generated if not specified
+    
+  payment:
+    enabled: true
+    replicas: 1
+    image:
+      repository: payment-service
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 8002
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    route:
+      enabled: true
+      host: ""  # Will be auto-generated if not specified
+    
+  shipping:
+    enabled: true
+    replicas: 1
+    image:
+      repository: shipping-service
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 8003
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    route:
+      enabled: true
+      host: ""  # Will be auto-generated if not specified
+    
+  notification:
+    enabled: true
+    replicas: 1
+    image:
+      repository: notification-service
+      tag: latest
+    service:
+      type: ClusterIP
+      port: 8004
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "200m"
+      limits:
+        memory: "512Mi"
+        cpu: "400m"
+    route:
+      enabled: true
+      host: ""  # Will be auto-generated if not specified 

@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e-commerce-saga
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  selector:
+    app: mongodb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:4.4
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 500m
+          requests:
+            memory: 128Mi
+            cpu: 250m
+      volumes:
+      - name: mongo-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: order-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+      - name: order-service
+        image: quay.io/centos7/python-38-centos7:latest
+        command: ["bash", "-c"]
+        args:
+          - |
+            pip install fastapi uvicorn
+            pip install pydantic pymongo
+            
+            mkdir -p /app/services/order
+            cat > /app/services/order/main.py << 'EOF'
+            from fastapi import FastAPI
+            import pymongo
+            
+            app = FastAPI(title="Order Service")
+            
+            @app.get("/")
+            def read_root():
+                return {"message": "Order Service is running"}
+            
+            @app.get("/health")
+            def health_check():
+                return {"status": "healthy"}
+                
+            @app.get("/mongo-status")
+            def mongo_status():
+                try:
+                    client = pymongo.MongoClient("mongodb://mongodb:27017/")
+                    info = client.server_info()
+                    return {"status": "connected", "version": info.get("version")}
+                except Exception as e:
+                    return {"status": "error", "message": str(e)}
+            EOF
+            
+            cd /app && python -m uvicorn services.order.main:app --host 0.0.0.0 --port 8000
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  to:
+    kind: Service
+    name: order-service
+  port:
+    targetPort: 8000 
