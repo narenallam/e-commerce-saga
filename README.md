@@ -589,7 +589,10 @@ kubectl port-forward -n e-commerce-saga svc/payment-service 8002:8002 & \
 kubectl port-forward -n e-commerce-saga svc/shipping-service 8003:8003 & \
 kubectl port-forward -n e-commerce-saga svc/notification-service 8004:8004 &
 ```
-
+**For mongoDB**
+```bash
+kubectl port-forward -n e-commerce-saga svc/mongodb 27017:27017 &
+```
 **API Documentation:**
 - Main Portal: http://localhost:8000/docs
 - All Services: http://localhost:800{0-4}/docs
