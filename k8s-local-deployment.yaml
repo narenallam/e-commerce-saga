@@ -1,0 +1,314 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e-commerce-saga
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  selector:
+    app: mongodb
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:4.4
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 500m
+          requests:
+            memory: 128Mi
+            cpu: 250m
+      volumes:
+      - name: mongo-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: order-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+      - name: order-service
+        image: e-commerce-saga/order-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: SERVICE_DIR
+          value: "order"
+        - name: SERVICE_MODULE
+          value: "services.order.main:app"
+        - name: PORT
+          value: "8000"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8001
+    targetPort: 8001
+  selector:
+    app: inventory-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: inventory-service
+  template:
+    metadata:
+      labels:
+        app: inventory-service
+    spec:
+      containers:
+      - name: inventory-service
+        image: e-commerce-saga/inventory-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8001
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: SERVICE_DIR
+          value: "inventory"
+        - name: SERVICE_MODULE
+          value: "services.inventory.main:app"
+        - name: PORT
+          value: "8001"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8002
+    targetPort: 8002
+  selector:
+    app: payment-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - name: payment-service
+        image: e-commerce-saga/payment-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8002
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: SERVICE_DIR
+          value: "payment"
+        - name: SERVICE_MODULE
+          value: "services.payment.main:app"
+        - name: PORT
+          value: "8002"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shipping-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8003
+    targetPort: 8003
+  selector:
+    app: shipping-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shipping-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: shipping-service
+  template:
+    metadata:
+      labels:
+        app: shipping-service
+    spec:
+      containers:
+      - name: shipping-service
+        image: e-commerce-saga/shipping-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8003
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: SERVICE_DIR
+          value: "shipping"
+        - name: SERVICE_MODULE
+          value: "services.shipping.main:app"
+        - name: PORT
+          value: "8003"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: e-commerce-saga
+spec:
+  ports:
+  - port: 8004
+    targetPort: 8004
+  selector:
+    app: notification-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: e-commerce-saga
+spec:
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: e-commerce-saga/notification-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8004
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: SERVICE_DIR
+          value: "notification"
+        - name: SERVICE_MODULE
+          value: "services.notification.main:app"
+        - name: PORT
+          value: "8004"
+        resources:
+          limits:
+            memory: 128Mi
+            cpu: 200m
+          requests:
+            memory: 64Mi
+            cpu: 100m 

@@ -3,6 +3,7 @@ import os
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, Body
 from typing import List, Optional, Dict, Any
+from contextlib import asynccontextmanager
 
 # Add parent directory to path to import common modules
 sys.path.append(
@@ -19,18 +20,17 @@ from .models import (
 )
 from .service import PaymentService
 
-app = FastAPI(title="Payment Service")
 payment_service = PaymentService()
 
 
-@app.on_event("startup")
-async def startup_db_client():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await payment_service.initialize()
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
+    yield
     await Database.close()
+
+
+app = FastAPI(title="Payment Service", lifespan=lifespan)
 
 
 @app.get("/")
