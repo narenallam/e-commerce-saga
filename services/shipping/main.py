@@ -38,6 +38,12 @@ async def root():
     return {"message": "Shipping Service API", "status": "running"}
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
 @app.get("/api/shipping", response_model=List[ShippingResponse])
 async def list_shipments(
     customer_id: Optional[str] = None,

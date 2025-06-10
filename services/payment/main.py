@@ -38,6 +38,12 @@ async def root():
     return {"message": "Payment Service API", "status": "running"}
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
 @app.get("/api/payments", response_model=List[PaymentResponse])
 async def list_payments(
     customer_id: Optional[str] = None,

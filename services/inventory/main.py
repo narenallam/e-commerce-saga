@@ -39,6 +39,12 @@ async def root():
     return {"message": "Inventory Service API", "status": "running"}
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
 @app.get("/api/inventory", response_model=List[ProductInventory])
 async def list_inventory(status: Optional[str] = None, limit: int = 100, skip: int = 0):
     """List inventory with optional filtering"""

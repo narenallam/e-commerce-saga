@@ -40,6 +40,12 @@ async def root():
     return {"message": "Notification Service API", "status": "running"}
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
 @app.get("/api/notifications", response_model=List[NotificationResponse])
 async def list_notifications(
     customer_id: Optional[str] = None,
