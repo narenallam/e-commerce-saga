@@ -72,20 +72,14 @@ spec:
             memory: 256Mi
             cpu: 250m
         livenessProbe:
-          exec:
-            command:
-            - mongo
-            - --eval
-            - "db.adminCommand('ismaster')"
+          tcpSocket:
+            port: 27017
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
-          exec:
-            command:
-            - mongo
-            - --eval
-            - "db.adminCommand('ismaster')"
-          initialDelaySeconds: 5
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 10
           periodSeconds: 5
       volumes:
       - name: mongodb-storage
