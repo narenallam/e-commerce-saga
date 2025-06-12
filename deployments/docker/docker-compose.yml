@@ -18,8 +18,8 @@ services:
 
   order-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE_DIR: order
     container_name: order-service
@@ -41,8 +41,8 @@ services:
 
   inventory-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE_DIR: inventory
     container_name: inventory-service
@@ -59,8 +59,8 @@ services:
 
   payment-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE_DIR: payment
     container_name: payment-service
@@ -77,8 +77,8 @@ services:
 
   shipping-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE_DIR: shipping
     container_name: shipping-service
@@ -95,8 +95,8 @@ services:
 
   notification-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
       args:
         SERVICE_DIR: notification
     container_name: notification-service
@@ -108,6 +108,34 @@ services:
       - PORT=8004
     depends_on:
       - mongodb
+    networks:
+      - saga-network
+
+  saga-coordinator:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_DIR: coordinator
+    container_name: saga-coordinator
+    ports:
+      - "9000:9000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - MONGO_DB=ecommerce_saga
+      - ORDER_SERVICE_URL=http://order-service:8000
+      - INVENTORY_SERVICE_URL=http://inventory-service:8001
+      - PAYMENT_SERVICE_URL=http://payment-service:8002
+      - SHIPPING_SERVICE_URL=http://shipping-service:8003
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8004
+      - PORT=9000
+    depends_on:
+      - mongodb
+      - order-service
+      - inventory-service
+      - payment-service
+      - shipping-service
+      - notification-service
     networks:
       - saga-network
 

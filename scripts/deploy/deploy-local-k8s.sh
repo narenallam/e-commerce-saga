@@ -5,9 +5,6 @@ set -e
 
 echo "Building Docker images..."
 
-# Build base image
-docker build -t e-commerce-saga-base .
-
 # Build service images
 SERVICES=("order" "inventory" "payment" "shipping" "notification")
 
@@ -15,14 +12,14 @@ for service in "${SERVICES[@]}"; do
   echo "Building $service service..."
   docker build -t e-commerce-saga/$service-service:latest \
     --build-arg SERVICE_DIR=$service \
-    -f Dockerfile .
+    -f deployments/docker/Dockerfile .
 done
 
 echo "Creating Kubernetes namespace..."
 kubectl create namespace e-commerce-saga --dry-run=client -o yaml | kubectl apply -f - --validate=false
 
 echo "Deploying services to Kubernetes..."
-kubectl apply -f k8s-local-deployment.yaml --validate=false
+kubectl apply -f deployments/kubernetes/k8s-local-deployment.yaml --validate=false
 
 echo "Waiting for pods to be ready..."
 kubectl wait --namespace e-commerce-saga \

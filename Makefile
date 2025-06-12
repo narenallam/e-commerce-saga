@@ -44,7 +44,7 @@ help:
 # Development commands
 install:
 	@echo "📦 Installing dependencies..."
-	python3 -m pip install -r requirements.txt --break-system-packages --user
+	python3 -m pip install -r config/requirements.txt --break-system-packages --user
 	python3 -m pip install faker pytest pytest-asyncio --break-system-packages --user
 	@echo "Installing k6 load testing tool..."
 	@which k6 >/dev/null 2>&1 || (echo "Please install k6 manually: https://k6.io/docs/get-started/installation/" && echo "On macOS: brew install k6" && echo "On Ubuntu: sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69 && echo 'deb https://dl.k6.io/deb stable main' | sudo tee /etc/apt/sources.list.d/k6.list && sudo apt-get update && sudo apt-get install k6")
@@ -54,52 +54,53 @@ test: test-unit test-func test-chaos
 
 test-unit:
 	@echo "🧪 Running unit tests..."
-	pytest tests/ -v
+	PYTHONPATH=src pytest tests/ -v
 
 test-func:
 	@echo "🔧 Running functional tests..."
-	python3 scripts/functional_tests.py
+	PYTHONPATH=src python3 scripts/test/functional_tests.py
 
 test-chaos:
 	@echo "🔥 Running chaos tests..."
-	python3 scripts/chaos_testing.py
+	PYTHONPATH=src python3 scripts/test/chaos_testing.py
 
 test-perf:
 	@echo "⚡ Running performance tests..."
-	bash scripts/performance_test.sh
+	bash scripts/test/performance_test.sh
 
 # Data management
 generate-data:
 	@echo "📊 Generating test data..."
-	python3 scripts/test_data_generator.py --reset
+	PYTHONPATH=src python3 tools/test_data_generator.py --reset
 
 check-consistency:
 	@echo "🔍 Checking data consistency..."
-	python3 scripts/data_consistency_checker.py
+	PYTHONPATH=src python3 tools/data_consistency_checker.py
 
 cleanup-data:
 	@echo "🧹 Cleaning up test data..."
-	python3 scripts/test_data_generator.py --cleanup
+	PYTHONPATH=src python3 tools/test_data_generator.py --cleanup
 
 # Docker build
 build:
 	@echo "🏗️ Building Docker images..."
-	docker build -t e-commerce-saga/order-service:latest --build-arg SERVICE_DIR=order .
-	docker build -t e-commerce-saga/inventory-service:latest --build-arg SERVICE_DIR=inventory .
-	docker build -t e-commerce-saga/payment-service:latest --build-arg SERVICE_DIR=payment .
-	docker build -t e-commerce-saga/shipping-service:latest --build-arg SERVICE_DIR=shipping .
-	docker build -t e-commerce-saga/notification-service:latest --build-arg SERVICE_DIR=notification .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/order-service:latest --build-arg SERVICE_DIR=order .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/inventory-service:latest --build-arg SERVICE_DIR=inventory .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/payment-service:latest --build-arg SERVICE_DIR=payment .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/shipping-service:latest --build-arg SERVICE_DIR=shipping .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/notification-service:latest --build-arg SERVICE_DIR=notification .
+	docker build -f deployments/docker/Dockerfile -t e-commerce-saga/saga-coordinator:latest --build-arg SERVICE_DIR=coordinator .
 
 # Deployment
 deploy-k8s:
 	@echo "🚀 Deploying to Kubernetes..."
-	kubectl apply -f k8s-local-deployment.yaml
+	kubectl apply -f deployments/kubernetes/k8s-local-deployment.yaml
 	@echo "⏳ Waiting for deployment to be ready..."
 	kubectl wait --for=condition=available --timeout=300s deployment --all -n e-commerce-saga
 
 deploy-compose:
 	@echo "🐳 Deploying with Docker Compose..."
-	docker-compose up -d --build
+	docker-compose -f deployments/docker/docker-compose.yml up -d --build
 	@echo "⏳ Waiting for services to be ready..."
 	sleep 30
 
@@ -110,38 +111,38 @@ logs:
 
 monitor:
 	@echo "🖥️ Starting monitoring dashboard..."
-	python3 scripts/monitoring_dashboard.py
+	PYTHONPATH=src python3 scripts/monitoring/monitoring_dashboard.py
 
 health:
 	@echo "🩺 Checking service health..."
-	python3 scripts/check_health.py
+	PYTHONPATH=src python3 scripts/monitoring/check_health.py
 
 analyze:
 	@echo "📊 Analyzing system logs..."
-	python3 scripts/log_analyzer.py --report health
+	PYTHONPATH=src python3 scripts/monitoring/log_analyzer.py --report health
 
 # Log management
 logs-stats:
 	@echo "📊 Showing log statistics..."
-	python3 scripts/log_rotation_manager.py --stats
+	PYTHONPATH=src python3 scripts/monitoring/log_rotation_manager.py --stats
 
 logs-compress:
 	@echo "🗜️ Compressing old log files..."
-	python3 scripts/log_rotation_manager.py --compress 7
+	PYTHONPATH=src python3 scripts/monitoring/log_rotation_manager.py --compress 7
 
 logs-cleanup:
 	@echo "🧹 Cleaning up old compressed logs..."
-	python3 scripts/log_rotation_manager.py --cleanup 30
+	PYTHONPATH=src python3 scripts/monitoring/log_rotation_manager.py --cleanup 30
 
 logs-rotate:
 	@echo "🔄 Rotating logs..."
 	@read -p "Enter service name: " service; \
-	python3 scripts/log_rotation_manager.py --rotate $$service
+	PYTHONPATH=src python3 scripts/monitoring/log_rotation_manager.py --rotate $$service
 
 # Setup and utilities
 setup:
 	@echo "🔧 Setting up development environment..."
-	bash scripts/setup_test_environment.sh
+	bash tools/setup_test_environment.sh
 
 port-forward:
 	@echo "📡 Setting up port forwarding..."
@@ -150,12 +151,13 @@ port-forward:
 	kubectl port-forward -n e-commerce-saga svc/payment-service 8002:8002 &
 	kubectl port-forward -n e-commerce-saga svc/shipping-service 8003:8003 &
 	kubectl port-forward -n e-commerce-saga svc/notification-service 8004:8004 &
+	kubectl port-forward -n e-commerce-saga svc/saga-coordinator 9000:9000 &
 	kubectl port-forward -n e-commerce-saga svc/mongodb 27017:27017 &
 	@echo "✅ Port forwarding setup complete"
 
 clean:
 	@echo "🧹 Cleaning up resources..."
-	docker-compose down -v
+	docker-compose -f deployments/docker/docker-compose.yml down -v || true
 	kubectl delete namespace e-commerce-saga --ignore-not-found
 	docker system prune -f
 
@@ -186,7 +188,7 @@ ci-build: build
 # Documentation
 docs:
 	@echo "📚 Opening documentation..."
-	@echo "Functional Testing: docs/functional-testing.md"
+	@echo "Main Documentation: README.md"
 	@echo "API Documentation: http://localhost:8000/docs"
 	@echo "Monitoring Dashboard: make monitor"
 
@@ -198,7 +200,7 @@ security-scan:
 
 # Version and release management
 version:
-	@echo "📌 Current version: $(shell grep version pyproject.toml | cut -d'"' -f2)"
+	@echo "📌 Current version: $(shell grep version pyproject.toml | cut -d'"' -f2 2>/dev/null || echo "Not available")"
 
 tag-release:
 	@read -p "Enter version tag: " tag; \

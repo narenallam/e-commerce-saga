@@ -40,6 +40,10 @@ SERVICES = {
         "primary": "http://localhost:8004/health",
         "fallback": "http://localhost:8004/",
     },
+    "saga-coordinator": {
+        "primary": "http://localhost:9000/health",
+        "fallback": "http://localhost:9000/",
+    },
 }
 
 
