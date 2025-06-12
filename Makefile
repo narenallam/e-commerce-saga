@@ -1,6 +1,6 @@
 # Makefile for E-commerce Saga System (Kubernetes Only)
 
-.PHONY: help install test build deploy clean logs port-forward dev-reset cluster-info monitor metrics
+.PHONY: help install test build deploy clean logs port-forward dev-reset cluster-info monitor metrics test-monitor
 
 help:
 	@source scripts/console-ui.sh && \
@@ -20,6 +20,7 @@ help:
 	printf "\033[0;35m  🩺 %-15s\033[0m \033[1;37m%-50s\033[0m \033[0;33m[✨ ENHANCED]\033[0m\n" "health" "Service health & application status monitoring" && \
 	printf "\033[0;35m  🌐 %-15s\033[0m \033[1;37m%-50s\033[0m \033[0;33m[✨ ENHANCED]\033[0m\n" "cluster-info" "Cluster infrastructure & topology details" && \
 	printf "\033[0;35m  📊 %-15s\033[0m \033[1;37m%-50s\033[0m \033[0;33m[✨ ENHANCED]\033[0m\n" "monitor" "Real-time cluster monitoring dashboard" && \
+	printf "\033[0;35m  📸 %-15s\033[0m \033[1;37m%-50s\033[0m \033[0;33m[📋 SNAPSHOT]\033[0m\n" "test-monitor" "Snapshot view of complete monitoring layout" && \
 	printf "\033[0;35m  📈 %-15s\033[0m \033[1;37m%-50s\033[0m\n" "metrics" "Install metrics server for resource monitoring" && \
 	printf "\n" && \
 	printf "\033[1;37m\033[4m🔗 CONNECTIVITY\033[0m\n" && \
@@ -82,6 +83,9 @@ cluster-info:
 
 monitor:
 	@PYTHONPATH=src python3 ./scripts/monitor-rich.py
+
+test-monitor:
+	@PYTHONPATH=src python3 ./scripts/monitor-snapshot.py
 
 metrics:
 	@echo "📊 Installing Kubernetes Metrics Server..."

@@ -1,32 +1,18 @@
 #!/usr/bin/env python3
 
 import subprocess
-import time
-import sys
-import signal
 from datetime import datetime
 from typing import Dict, List, Tuple
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from rich.live import Live
-from rich.layout import Layout
 from rich import box
 from rich.align import Align
 from rich.columns import Columns
 
 # Initialize Rich console
 console = Console()
-
-
-def signal_handler(sig, frame):
-    """Handle Ctrl+C gracefully."""
-    console.print("\n[yellow]👋 Monitoring stopped by user[/yellow]")
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, signal_handler)
 
 
 def run_kubectl_command(cmd: str) -> List[List[str]]:
@@ -77,9 +63,9 @@ def create_overview_panel(running_pods: int, total_pods: int) -> Panel:
 
 def create_pods_table() -> Table:
     """Create real-time pods status table."""
-    table = Table(title="📋 POD STATUS", box=box.ROUNDED, show_lines=True)
+    table = Table(title="📋 ALL PODS STATUS", box=box.ROUNDED, show_lines=True)
 
-    table.add_column("POD NAME", style="cyan", no_wrap=False, max_width=35)
+    table.add_column("POD NAME", style="cyan", no_wrap=False, max_width=40)
     table.add_column("STATUS", style="green", justify="center", width=12)
     table.add_column("RESTARTS", style="yellow", justify="center", width=9)
     table.add_column("AGE", style="blue", width=8)
@@ -153,7 +139,7 @@ def create_services_table() -> Table:
     """Create service connectivity table."""
     table = Table(title="🌐 SERVICE CONNECTIVITY", box=box.ROUNDED, show_lines=True)
 
-    table.add_column("SERVICE", style="cyan", max_width=20)
+    table.add_column("SERVICE", style="cyan", max_width=22)
     table.add_column("PORT", style="blue", justify="center", width=6)
     table.add_column("ENDPOINTS", style="yellow", width=10)
     table.add_column("STATUS", style="green", width=11)
@@ -213,7 +199,7 @@ def create_resources_table() -> Table:
     """Create resource usage table."""
     table = Table(title="💻 RESOURCE USAGE", box=box.ROUNDED, show_lines=True)
 
-    table.add_column("POD", style="cyan", max_width=30)
+    table.add_column("POD", style="cyan", max_width=25)
     table.add_column("CPU", style="green", justify="right", width=8)
     table.add_column("MEMORY", style="magenta", justify="right", width=8)
 
@@ -226,14 +212,14 @@ def create_resources_table() -> Table:
             check=True,
         )
 
-        lines = result.stdout.strip().split("\n")[:8]  # Show top 8 pods
+        lines = result.stdout.strip().split("\n")
         for line in lines:
             if line.strip():
                 parts = line.split()
                 if len(parts) >= 3:
                     name, cpu, memory = parts[:3]
                     table.add_row(
-                        f"[cyan]📊 {name[:25]}[/cyan]",
+                        f"[cyan]📊 {name[:22]}[/cyan]",
                         f"[green]{cpu}[/green]",
                         f"[magenta]{memory}[/magenta]",
                     )
@@ -247,78 +233,42 @@ def create_resources_table() -> Table:
     return table
 
 
-def create_scrollable_layout():
-    """Create a scrollable layout that shows all content properly."""
-    # Don't use Layout for better control over rendering
-    pass
-
-
 def main():
-    """Main monitoring function with scrollable output."""
+    """Main monitoring snapshot function."""
+    console.clear()
+
+    # Get current status
+    running_pods, total_pods = get_pod_status()
+
+    # Header
+    console.print(create_header_panel())
+    console.print()
+
+    # Overview
+    console.print(create_overview_panel(running_pods, total_pods))
+    console.print()
+
+    # All Pods Table - Full display with all pods visible
+    console.print("[bold]📋 COMPLETE POD LIST (All pods visible)[/bold]")
+    console.print(create_pods_table())
+    console.print()
+
+    # Deployment table
+    console.print(create_deployments_table())
+    console.print()
+
+    # Side-by-side layout for services and resources
+    console.print("[bold]🔗 SERVICES & RESOURCES[/bold]")
     console.print(
-        "[bold blue]📊 Starting Real-time Kubernetes Cluster Monitoring...[/bold blue]"
+        Columns(
+            [create_services_table(), create_resources_table()], equal=True, expand=True
+        )
     )
-    console.print("[dim]💡 Press Ctrl+C to stop monitoring[/dim]")
-    time.sleep(2)
 
-    try:
-        while True:
-            console.clear()
-
-            # Get current status
-            running_pods, total_pods = get_pod_status()
-
-            # Header
-            console.print(create_header_panel())
-            console.print()
-
-            # Overview
-            console.print(create_overview_panel(running_pods, total_pods))
-            console.print()
-
-            # All Pods Table - Full display first
-            console.print(create_pods_table())
-            console.print()
-
-            # Create columns layout for bottom tables
-            left_column = [
-                create_deployments_table(),
-            ]
-
-            right_column = [
-                create_services_table(),
-                Text(""),  # Spacer
-                create_resources_table(),
-            ]
-
-            # Print deployment table
-            console.print(create_deployments_table())
-            console.print()
-
-            # Print service and resource tables side by side
-            console.print(
-                Columns(
-                    [
-                        Panel(create_services_table(), padding=(0, 1)),
-                        Panel(create_resources_table(), padding=(0, 1)),
-                    ],
-                    equal=True,
-                )
-            )
-
-            console.print()
-            console.print(
-                "[cyan]⚡ Next update in 5 seconds... Press Ctrl+C to stop[/cyan]"
-            )
-
-            time.sleep(5)
-
-    except KeyboardInterrupt:
-        console.print("\n[yellow]👋 Monitoring stopped by user[/yellow]")
-        sys.exit(0)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        sys.exit(1)
+    console.print()
+    console.print(
+        "[dim]This is a snapshot view showing the complete layout without live updates.[/dim]"
+    )
 
 
 if __name__ == "__main__":
