@@ -219,3 +219,73 @@ class PaymentService:
         payments = await cursor.to_list(length=limit)
 
         return payments
+
+    async def get_payment_statistics(self) -> Dict[str, Any]:
+        """Get payment statistics"""
+        try:
+            # Count payments by status
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": "$status",
+                        "count": {"$sum": 1},
+                        "total_amount": {"$sum": "$amount"},
+                    }
+                }
+            ]
+
+            status_stats = []
+            async for result in self.db[self.payments_collection].aggregate(pipeline):
+                status_stats.append(
+                    {
+                        "status": result["_id"],
+                        "count": result["count"],
+                        "total_amount": result["total_amount"],
+                    }
+                )
+
+            # Total payments count
+            total_payments = await self.db[self.payments_collection].count_documents({})
+
+            # Recent payments (last 7 days)
+            from datetime import timedelta
+
+            seven_days_ago = datetime.now() - timedelta(days=7)
+            recent_payments = await self.db[self.payments_collection].count_documents(
+                {"created_at": {"$gte": seven_days_ago}}
+            )
+
+            # Payment method breakdown
+            method_pipeline = [
+                {
+                    "$group": {
+                        "_id": "$payment_method",
+                        "count": {"$sum": 1},
+                        "total_amount": {"$sum": "$amount"},
+                    }
+                }
+            ]
+
+            method_stats = []
+            async for result in self.db[self.payments_collection].aggregate(
+                method_pipeline
+            ):
+                method_stats.append(
+                    {
+                        "payment_method": result["_id"],
+                        "count": result["count"],
+                        "total_amount": result["total_amount"],
+                    }
+                )
+
+            return {
+                "total_payments": total_payments,
+                "recent_payments_7_days": recent_payments,
+                "status_breakdown": status_stats,
+                "payment_method_breakdown": method_stats,
+                "generated_at": datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            print(f"Error getting payment statistics: {str(e)}")
+            return {"error": str(e)}

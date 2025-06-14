@@ -2,25 +2,50 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: e-commerce-saga
+  labels:
+    name: e-commerce-saga
 ---
+# MongoDB StatefulSet with Persistent Volume
 apiVersion: v1
 kind: Service
 metadata:
   name: mongodb
   namespace: e-commerce-saga
+  labels:
+    app: mongodb
+    tier: database
 spec:
   ports:
   - port: 27017
     targetPort: 27017
+    name: mongodb
   selector:
     app: mongodb
+  clusterIP: None  # Headless service for StatefulSet
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: e-commerce-saga
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: mongodb
   namespace: e-commerce-saga
+  labels:
+    app: mongodb
+    tier: database
 spec:
+  serviceName: mongodb
+  replicas: 1
   selector:
     matchLabels:
       app: mongodb
@@ -28,44 +53,505 @@ spec:
     metadata:
       labels:
         app: mongodb
+        tier: database
     spec:
       containers:
       - name: mongodb
         image: mongo:8.0
         ports:
         - containerPort: 27017
+          name: mongodb
         volumeMounts:
-        - name: mongo-data
+        - name: mongodb-storage
           mountPath: /data/db
         resources:
           limits:
-            memory: 256Mi
+            memory: 512Mi
             cpu: 500m
           requests:
-            memory: 128Mi
+            memory: 256Mi
             cpu: 250m
+        livenessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 10
+          periodSeconds: 5
       volumes:
-      - name: mongo-data
-        emptyDir: {}
+      - name: mongodb-storage
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
 ---
+# Zookeeper for Kafka
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: e-commerce-saga
+  labels:
+    app: zookeeper
+    tier: messaging
+spec:
+  ports:
+  - port: 2181
+    targetPort: 2181
+    name: zookeeper
+  selector:
+    app: zookeeper
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zookeeper-data-pvc
+  namespace: e-commerce-saga
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: e-commerce-saga
+  labels:
+    app: zookeeper
+    tier: messaging
+spec:
+  serviceName: zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+        tier: messaging
+    spec:
+      containers:
+      - name: zookeeper
+        image: bitnami/zookeeper:3.9
+        ports:
+        - containerPort: 2181
+          name: zookeeper
+        env:
+        - name: ALLOW_ANONYMOUS_LOGIN
+          value: "yes"
+        - name: ZOO_HEAP_SIZE
+          value: "256"
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /bitnami/zookeeper
+        resources:
+          limits:
+            memory: 512Mi
+            cpu: 500m
+          requests:
+            memory: 256Mi
+            cpu: 250m
+        livenessProbe:
+          exec:
+            command:
+            - zkServer.sh
+            - status
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - zkServer.sh
+            - status
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: zookeeper-data
+        persistentVolumeClaim:
+          claimName: zookeeper-data-pvc
+---
+# Kafka for Event-Driven Architecture
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: e-commerce-saga
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: kafka
+  selector:
+    app: kafka
+  type: ClusterIP
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-client
+  namespace: e-commerce-saga
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: kafka
+  selector:
+    app: kafka
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: e-commerce-saga
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  serviceName: kafka
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+        tier: messaging
+    spec:
+      containers:
+      - name: kafka
+        image: bitnami/kafka:3.6
+        command:
+        - sh
+        - -c
+        - |
+          export KAFKA_CFG_BROKER_ID=$(echo $HOSTNAME | grep -o '[0-9]*$')
+          export KAFKA_CFG_ADVERTISED_LISTENERS="PLAINTEXT://$(hostname -f):9092"
+          exec /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh
+        ports:
+        - containerPort: 9092
+          name: kafka
+        env:
+        # Zookeeper Configuration
+        - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+          value: "zookeeper:2181"
+        # Listeners Configuration
+        - name: KAFKA_CFG_LISTENERS
+          value: "PLAINTEXT://:9092"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT"
+        # Cluster Configuration (Adjusted for initial deployment)
+        - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "2"
+        - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "2"
+        - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+        - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+          value: "2"
+        - name: KAFKA_CFG_MIN_IN_SYNC_REPLICAS
+          value: "1"
+        - name: KAFKA_CFG_NUM_PARTITIONS
+          value: "3"
+        # Performance and Retention
+        - name: KAFKA_CFG_GROUP_INITIAL_REBALANCE_DELAY_MS
+          value: "3000"
+        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_CFG_LOG_RETENTION_BYTES
+          value: "1073741824"
+        - name: KAFKA_CFG_LOG_SEGMENT_BYTES
+          value: "1073741824"
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        # Producer/Consumer Optimization
+        - name: KAFKA_CFG_COMPRESSION_TYPE
+          value: "gzip"
+        - name: KAFKA_CFG_MESSAGE_MAX_BYTES
+          value: "1048576"
+        - name: KAFKA_CFG_REPLICA_FETCH_MAX_BYTES
+          value: "1048576"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: 1000m
+          requests:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# Redis for Caching - High Availability
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: e-commerce-saga
+  labels:
+    app: redis
+    tier: caching
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app: redis
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: e-commerce-saga
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: e-commerce-saga
+  labels:
+    app: redis
+    tier: caching
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: caching
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.0-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        env:
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
+        command:
+        - redis-server
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "256mb"
+        - --maxmemory-policy
+        - "allkeys-lru"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        resources:
+          limits:
+            memory: 512Mi
+            cpu: 500m
+          requests:
+            memory: 256Mi
+            cpu: 250m
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --no-auth-warning
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --no-auth-warning
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+---
+# Saga Coordinator - High Priority, 2 Replicas
+apiVersion: v1
+kind: Service
+metadata:
+  name: saga-coordinator
+  namespace: e-commerce-saga
+  labels:
+    app: saga-coordinator
+    tier: orchestration
+spec:
+  ports:
+  - port: 9000
+    targetPort: 9000
+    name: http
+  selector:
+    app: saga-coordinator
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: saga-coordinator
+  namespace: e-commerce-saga
+  labels:
+    app: saga-coordinator
+    tier: orchestration
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: saga-coordinator
+  template:
+    metadata:
+      labels:
+        app: saga-coordinator
+        tier: orchestration
+    spec:
+      priorityClassName: high-priority
+      containers:
+      - name: saga-coordinator
+        image: e-commerce-saga/saga-coordinator:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 9000
+          name: http
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: ORDER_SERVICE_URL
+          value: "http://order-service:8000"
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service:8001"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service:8002"
+        - name: SHIPPING_SERVICE_URL
+          value: "http://shipping-service:8003"
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service:8004"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
+        - name: PORT
+          value: "9000"
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 300m
+          requests:
+            memory: 128Mi
+            cpu: 150m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Order Service - High Priority, 3 Replicas
 apiVersion: v1
 kind: Service
 metadata:
   name: order-service
   namespace: e-commerce-saga
+  labels:
+    app: order-service
+    tier: business-logic
 spec:
   ports:
   - port: 8000
     targetPort: 8000
+    name: http
   selector:
     app: order-service
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: order-service
   namespace: e-commerce-saga
+  labels:
+    app: order-service
+    tier: business-logic
 spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
   selector:
     matchLabels:
       app: order-service
@@ -73,105 +559,82 @@ spec:
     metadata:
       labels:
         app: order-service
+        tier: business-logic
     spec:
+      priorityClassName: high-priority
       containers:
       - name: order-service
         image: e-commerce-saga/order-service:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8000
+          name: http
         env:
         - name: MONGO_URI
           value: "mongodb://mongodb:27017"
         - name: MONGO_DB
           value: "ecommerce_saga"
-        - name: PYTHONPATH
-          value: "/app"
-        - name: SERVICE_DIR
-          value: "order"
-        - name: SERVICE_MODULE
-          value: "services.order.main:app"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
         - name: PORT
           value: "8000"
         resources:
           limits:
-            memory: 128Mi
-            cpu: 200m
+            memory: 256Mi
+            cpu: 300m
           requests:
-            memory: 64Mi
-            cpu: 100m
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: inventory-service
-  namespace: e-commerce-saga
-spec:
-  ports:
-  - port: 8001
-    targetPort: 8001
-  selector:
-    app: inventory-service
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: inventory-service
-  namespace: e-commerce-saga
-spec:
-  selector:
-    matchLabels:
-      app: inventory-service
-  template:
-    metadata:
-      labels:
-        app: inventory-service
-    spec:
-      containers:
-      - name: inventory-service
-        image: e-commerce-saga/inventory-service:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 8001
-        env:
-        - name: MONGO_URI
-          value: "mongodb://mongodb:27017"
-        - name: MONGO_DB
-          value: "ecommerce_saga"
-        - name: PYTHONPATH
-          value: "/app"
-        - name: SERVICE_DIR
-          value: "inventory"
-        - name: SERVICE_MODULE
-          value: "services.inventory.main:app"
-        - name: PORT
-          value: "8001"
-        resources:
-          limits:
             memory: 128Mi
-            cpu: 200m
-          requests:
-            memory: 64Mi
-            cpu: 100m
+            cpu: 150m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
+# Payment Service - High Priority, 3 Replicas
 apiVersion: v1
 kind: Service
 metadata:
   name: payment-service
   namespace: e-commerce-saga
+  labels:
+    app: payment-service
+    tier: business-logic
 spec:
   ports:
   - port: 8002
     targetPort: 8002
+    name: http
   selector:
     app: payment-service
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: payment-service
   namespace: e-commerce-saga
+  labels:
+    app: payment-service
+    tier: business-logic
 spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
   selector:
     matchLabels:
       app: payment-service
@@ -179,52 +642,165 @@ spec:
     metadata:
       labels:
         app: payment-service
+        tier: business-logic
     spec:
+      priorityClassName: high-priority
       containers:
       - name: payment-service
         image: e-commerce-saga/payment-service:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8002
+          name: http
         env:
         - name: MONGO_URI
           value: "mongodb://mongodb:27017"
         - name: MONGO_DB
           value: "ecommerce_saga"
-        - name: PYTHONPATH
-          value: "/app"
-        - name: SERVICE_DIR
-          value: "payment"
-        - name: SERVICE_MODULE
-          value: "services.payment.main:app"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
         - name: PORT
           value: "8002"
         resources:
           limits:
-            memory: 128Mi
-            cpu: 200m
+            memory: 256Mi
+            cpu: 300m
           requests:
-            memory: 64Mi
-            cpu: 100m
+            memory: 128Mi
+            cpu: 150m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
+# Inventory Service - Medium Priority, 2 Replicas
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: e-commerce-saga
+  labels:
+    app: inventory-service
+    tier: business-logic
+spec:
+  ports:
+  - port: 8001
+    targetPort: 8001
+    name: http
+  selector:
+    app: inventory-service
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: e-commerce-saga
+  labels:
+    app: inventory-service
+    tier: business-logic
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: inventory-service
+  template:
+    metadata:
+      labels:
+        app: inventory-service
+        tier: business-logic
+    spec:
+      priorityClassName: medium-priority
+      containers:
+      - name: inventory-service
+        image: e-commerce-saga/inventory-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8001
+          name: http
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongodb:27017"
+        - name: MONGO_DB
+          value: "ecommerce_saga"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
+        - name: PORT
+          value: "8001"
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 250m
+          requests:
+            memory: 128Mi
+            cpu: 125m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Shipping Service - Medium Priority, 2 Replicas
 apiVersion: v1
 kind: Service
 metadata:
   name: shipping-service
   namespace: e-commerce-saga
+  labels:
+    app: shipping-service
+    tier: business-logic
 spec:
   ports:
   - port: 8003
     targetPort: 8003
+    name: http
   selector:
     app: shipping-service
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: shipping-service
   namespace: e-commerce-saga
+  labels:
+    app: shipping-service
+    tier: business-logic
 spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: shipping-service
@@ -232,52 +808,82 @@ spec:
     metadata:
       labels:
         app: shipping-service
+        tier: business-logic
     spec:
+      priorityClassName: medium-priority
       containers:
       - name: shipping-service
         image: e-commerce-saga/shipping-service:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8003
+          name: http
         env:
         - name: MONGO_URI
           value: "mongodb://mongodb:27017"
         - name: MONGO_DB
           value: "ecommerce_saga"
-        - name: PYTHONPATH
-          value: "/app"
-        - name: SERVICE_DIR
-          value: "shipping"
-        - name: SERVICE_MODULE
-          value: "services.shipping.main:app"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
         - name: PORT
           value: "8003"
         resources:
           limits:
-            memory: 128Mi
-            cpu: 200m
+            memory: 256Mi
+            cpu: 250m
           requests:
-            memory: 64Mi
-            cpu: 100m
+            memory: 128Mi
+            cpu: 125m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
+# Notification Service - Low Priority, 1 Replica
 apiVersion: v1
 kind: Service
 metadata:
   name: notification-service
   namespace: e-commerce-saga
+  labels:
+    app: notification-service
+    tier: support
 spec:
   ports:
   - port: 8004
     targetPort: 8004
+    name: http
   selector:
     app: notification-service
+  type: ClusterIP
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: notification-service
   namespace: e-commerce-saga
+  labels:
+    app: notification-service
+    tier: support
 spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: notification-service
@@ -285,24 +891,27 @@ spec:
     metadata:
       labels:
         app: notification-service
+        tier: support
     spec:
+      priorityClassName: low-priority
       containers:
       - name: notification-service
         image: e-commerce-saga/notification-service:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8004
+          name: http
         env:
         - name: MONGO_URI
           value: "mongodb://mongodb:27017"
         - name: MONGO_DB
           value: "ecommerce_saga"
-        - name: PYTHONPATH
-          value: "/app"
-        - name: SERVICE_DIR
-          value: "notification"
-        - name: SERVICE_MODULE
-          value: "services.notification.main:app"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-client:9092"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: REDIS_PASSWORD
+          value: "e-commerce-saga-redis-pass"
         - name: PORT
           value: "8004"
         resources:
@@ -311,4 +920,41 @@ spec:
             cpu: 200m
           requests:
             memory: 64Mi
-            cpu: 100m 
+            cpu: 100m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Priority Classes
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000
+globalDefault: false
+description: "High priority class for critical services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medium-priority
+value: 500
+globalDefault: false
+description: "Medium priority class for important services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 100
+globalDefault: false
+description: "Low priority class for support services" 

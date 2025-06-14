@@ -4,6 +4,9 @@ from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
+from prometheus_client import make_asgi_app, Counter, Histogram
+from starlette.middleware.base import BaseHTTPMiddleware
+import time
 
 # Add the src directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +18,29 @@ app = FastAPI(
     description="Orchestrates distributed transactions across microservices",
     version="1.0.0",
 )
+
+REQUEST_COUNT = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status_code"]
+)
+REQUEST_LATENCY = Histogram(
+    "http_request_latency_seconds", "Request latency", ["endpoint"]
+)
+
+
+class PrometheusMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        REQUEST_COUNT.labels(
+            request.method, request.url.path, response.status_code
+        ).inc()
+        REQUEST_LATENCY.labels(request.url.path).observe(process_time)
+        return response
+
+
+app.add_middleware(PrometheusMiddleware)
+app.mount("/metrics", make_asgi_app())
 
 
 # Pydantic models for API
@@ -136,7 +162,7 @@ async def cancel_saga(saga_id: str):
 
 @app.get("/api/coordinator/sagas")
 async def list_active_sagas():
-    """List all active sagas"""
+    """List all active sagas with detailed information"""
     return {
         "active_sagas": len(active_sagas),
         "sagas": [
@@ -148,10 +174,87 @@ async def list_active_sagas():
                     else str(saga.status)
                 ),
                 "order_id": saga.context.get("order_id"),
+                "steps_completed": len([s for s in saga.steps if s.is_executed]),
+                "total_steps": len(saga.steps),
+                "failed_step_index": (
+                    saga.failed_step_index if saga.failed_step_index >= 0 else None
+                ),
             }
             for saga_id, saga in active_sagas.items()
         ],
     }
+
+
+@app.get("/api/coordinator/health")
+async def coordinator_health_check():
+    """Enhanced health check that also checks service connectivity"""
+    try:
+        # Import here to avoid circular imports
+        from common.messaging import ServiceCommunicator
+
+        communicator = ServiceCommunicator()
+        service_health = await communicator.check_all_services_health()
+
+        all_services_healthy = all(service_health.values())
+
+        return {
+            "coordinator_status": "healthy",
+            "active_sagas": len(active_sagas),
+            "services_health": service_health,
+            "all_services_healthy": all_services_healthy,
+            "service_urls": communicator.base_urls,
+        }
+    except Exception as e:
+        return {
+            "coordinator_status": "degraded",
+            "error": str(e),
+            "active_sagas": len(active_sagas),
+        }
+
+
+@app.get("/api/coordinator/statistics")
+async def get_coordinator_statistics():
+    """Get coordinator statistics and metrics"""
+    try:
+        # Calculate saga statistics
+        total_sagas = len(active_sagas)
+
+        status_counts = {}
+        for saga in active_sagas.values():
+            status = (
+                saga.status.value if hasattr(saga.status, "value") else str(saga.status)
+            )
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        # Calculate step completion statistics
+        total_steps = sum(len(saga.steps) for saga in active_sagas.values())
+        completed_steps = sum(
+            len([s for s in saga.steps if s.is_executed])
+            for saga in active_sagas.values()
+        )
+
+        return {
+            "total_active_sagas": total_sagas,
+            "status_breakdown": status_counts,
+            "total_steps": total_steps,
+            "completed_steps": completed_steps,
+            "step_completion_rate": (
+                (completed_steps / total_steps * 100) if total_steps > 0 else 0
+            ),
+            "average_steps_per_saga": (
+                total_steps / total_sagas if total_sagas > 0 else 0
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving statistics: {str(e)}"
+        )
+
+
+@app.get("/metrics")
+async def metrics():
+    """Metrics endpoint for monitoring systems"""
+    return {"status": "metrics endpoint", "service": "saga-coordinator"}
 
 
 if __name__ == "__main__":

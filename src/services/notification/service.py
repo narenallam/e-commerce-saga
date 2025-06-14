@@ -11,6 +11,8 @@ sys.path.append(
 )
 
 from common.database import Database
+from common.cache import CacheService, cached, cache_invalidate, get_cache_service
+from common.config import get_settings
 from .models import NotificationStatus, NotificationType, NotificationChannel
 
 
@@ -21,10 +23,15 @@ class NotificationService:
         self.notifications_collection = "notifications"
         self.templates_collection = "notification_templates"
         self.db = None
+        self.cache_service = None
+        self.settings = get_settings("notification")
 
     async def initialize(self):
-        """Initialize the database connection"""
+        """Initialize the database connection and cache service"""
         self.db = await Database.connect("notification")
+
+        # Initialize cache service
+        self.cache_service = await get_cache_service("notification")
 
         # Create templates if not exist
         if await self.db[self.templates_collection].count_documents({}) == 0:
@@ -70,10 +77,25 @@ class NotificationService:
         await self.db[self.templates_collection].insert_many(templates)
         print("Sample notification templates created")
 
+    @cached(
+        prefix="template",
+        ttl=None,  # Will use template_cache_ttl from settings (86400 seconds - 24 hours)
+        key_pattern="template:{0}",  # Uses template_id as cache key
+    )
+    async def get_notification_template(
+        self, template_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get notification template by ID (with Redis caching for 24 hours)"""
+        template = await self.db[self.templates_collection].find_one(
+            {"template_id": template_id}
+        )
+        return template
+
+    @cache_invalidate(["statistics:*"])
     async def send_notification(
         self, notification_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Send a notification"""
+        """Send a notification (invalidates statistics cache)"""
         # Generate notification ID if not provided
         if "notification_id" not in notification_data:
             notification_data["notification_id"] = str(uuid.uuid4())
@@ -248,3 +270,100 @@ class NotificationService:
         notifications = await cursor.to_list(length=limit)
 
         return notifications
+
+    @cached(
+        prefix="statistics",
+        ttl=None,  # Will use statistics_cache_ttl from settings (300 seconds)
+        key_pattern="statistics:all",
+    )
+    async def get_notification_statistics(self) -> Dict[str, Any]:
+        """Get notification statistics (with Redis caching for 5-minute intervals)"""
+        try:
+            # Count notifications by status
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": "$status",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            status_stats = []
+            async for result in self.db[self.notifications_collection].aggregate(
+                pipeline
+            ):
+                status_stats.append(
+                    {
+                        "status": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            # Total notifications count
+            total_notifications = await self.db[
+                self.notifications_collection
+            ].count_documents({})
+
+            # Recent notifications (last 7 days)
+            from datetime import timedelta
+
+            seven_days_ago = datetime.now() - timedelta(days=7)
+            recent_notifications = await self.db[
+                self.notifications_collection
+            ].count_documents({"created_at": {"$gte": seven_days_ago}})
+
+            # Notification type breakdown
+            type_pipeline = [
+                {
+                    "$group": {
+                        "_id": "$notification_type",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            type_stats = []
+            async for result in self.db[self.notifications_collection].aggregate(
+                type_pipeline
+            ):
+                type_stats.append(
+                    {
+                        "notification_type": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            # Channel breakdown
+            channel_pipeline = [
+                {
+                    "$group": {
+                        "_id": "$channels",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            channel_stats = []
+            async for result in self.db[self.notifications_collection].aggregate(
+                channel_pipeline
+            ):
+                channel_stats.append(
+                    {
+                        "channels": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            return {
+                "total_notifications": total_notifications,
+                "recent_notifications_7_days": recent_notifications,
+                "status_breakdown": status_stats,
+                "notification_type_breakdown": type_stats,
+                "channel_breakdown": channel_stats,
+                "generated_at": datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            print(f"Error getting notification statistics: {str(e)}")
+            return {"error": str(e)}

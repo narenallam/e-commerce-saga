@@ -1,6 +1,6 @@
 # E-Commerce Saga System - Complete Documentation
 
-A comprehensive microservices-based e-commerce system implementing the **Saga Orchestration Pattern** for distributed transaction management. This system demonstrates robust transaction handling, failure recovery, system observability, and comprehensive testing in a cloud-native environment.
+A comprehensive microservices-based e-commerce system implementing the **Saga Orchestration Pattern** with **Event-Driven Architecture** for distributed transaction management. This system demonstrates robust transaction handling, failure recovery, system observability, and comprehensive testing in a cloud-native environment.
 
 
 ## 📚 Table of Contents
@@ -32,14 +32,28 @@ graph TB
             NS[Notification Service<br/>Port: 8004]
         end
         
+        subgraph "Event Infrastructure"
+            K[Kafka Cluster<br/>Port: 9092]
+            Z[Zookeeper<br/>Port: 2181]
+            R[Redis Cache<br/>Port: 6379]
+        end
+        
         SC[Saga Coordinator<br/>Port: 9000]
         DB[(MongoDB 8.0<br/>Port: 27017)]
         
-        SC --> OS
-        SC --> IS
-        SC --> PS
-        SC --> SS
-        SC --> NS
+        OS --> K
+        IS --> K
+        PS --> K
+        SS --> K
+        NS --> K
+        SC --> K
+        
+        OS --> R
+        IS --> R
+        PS --> R
+        SS --> R
+        NS --> R
+        SC --> R
         
         OS --> DB
         IS --> DB
@@ -47,10 +61,11 @@ graph TB
         SS --> DB
         NS --> DB
         SC --> DB
+        
+        K --> Z
     end
     
     CLIENT[Client Applications] --> SC
-    CLIENT --> OS
 ```
 
 ### Technology Stack
@@ -58,6 +73,8 @@ graph TB
 - **Language**: Python 3.11
 - **Framework**: FastAPI (with automatic OpenAPI/Swagger documentation)
 - **Database**: MongoDB 8.0
+- **Event Streaming**: Apache Kafka (3-replica high availability)
+- **Caching**: Redis
 - **Containerization**: Docker/Podman
 - **Orchestration**: Kubernetes/OpenShift
 - **Deployment**: Helm charts
@@ -74,6 +91,59 @@ graph TB
 | Payment Service | 8002 | Payment processing and refunds | Process payment, Issue refund |
 | Shipping Service | 8003 | Shipping and delivery management | Schedule, Cancel delivery |
 | Notification Service | 8004 | Customer notifications | Order confirmation, Status updates |
+| Kafka | 9092 | Event streaming platform | Message broker for service communication |
+| Redis | 6379 | Distributed caching | Service state and session management |
+
+### Event-Driven Architecture
+
+The system uses an event-driven architecture with Kafka as the message broker:
+
+1. **Event Types**:
+   - Domain Events (e.g., OrderCreated, PaymentProcessed)
+   - Command Events (e.g., ProcessPayment, ScheduleShipping)
+   - Compensation Events (e.g., CancelOrder, RefundPayment)
+
+2. **Event Flow**:
+   ```mermaid
+   sequenceDiagram
+       participant Client
+       participant SC as Saga Coordinator
+       participant K as Kafka
+       participant S as Services
+       
+       Client->>SC: Create Order
+       SC->>K: Publish OrderCreated
+       K->>S: Consume OrderCreated
+       S->>K: Publish ServiceEvent
+       K->>SC: Consume ServiceEvent
+       SC->>Client: Order Status
+   ```
+
+3. **Event Topics**:
+   - `order-events`: Order lifecycle events
+   - `inventory-events`: Inventory management events
+   - `payment-events`: Payment processing events
+   - `shipping-events`: Shipping management events
+   - `notification-events`: Customer notification events
+   - `saga-events`: Saga orchestration events
+
+### Redis Caching Strategy
+
+Redis is used for:
+1. **Service State Management**:
+   - Saga execution state
+   - Transaction context
+   - Service health status
+
+2. **Performance Optimization**:
+   - Frequently accessed data
+   - Session management
+   - Rate limiting
+
+3. **Distributed Locking**:
+   - Inventory reservations
+   - Payment processing
+   - Order status updates
 
 ### Saga Transaction Flow
 
@@ -113,6 +183,8 @@ graph LR
 - Kubernetes (minikube, kind, Docker Desktop) or OpenShift Local
 - kubectl CLI
 - Helm (optional, for OpenShift deployment)
+- Kafka (included in deployment)
+- Redis (included in deployment)
 
 ### ⚡ One-Command Setup
 
@@ -329,6 +401,12 @@ make analyze
 
 # View service logs
 make logs
+
+# Monitor Kafka topics
+make kafka-monitor
+
+# Check Redis status
+make redis-status
 ```
 
 ### 📈 Monitoring Features
@@ -339,6 +417,8 @@ make logs
 - **Performance Metrics**: Response times, throughput, error rates
 - **Saga Tracking**: Distributed transaction monitoring
 - **Data Consistency**: Cross-service data validation
+- **Kafka Monitoring**: Topic health, message rates, consumer lag
+- **Redis Monitoring**: Cache hit rates, memory usage, connection stats
 
 ### 🚨 Alert Conditions
 
@@ -360,6 +440,46 @@ make logs-compress
 # Clean up old compressed logs (30+ days)  
 make logs-cleanup
 ```
+
+### 📊 Observability: Prometheus & Grafana
+
+### Metrics Exposure
+- All services expose a `/metrics` endpoint (Prometheus format)
+- Metrics include: HTTP request count, latency, error rates, saga step durations, Kafka event counts
+
+### Prometheus Setup
+- Deployed in Kubernetes (see deployments/kubernetes/)
+- Scrapes all service `/metrics` endpoints
+- Example scrape config:
+  ```yaml
+  scrape_configs:
+    - job_name: 'ecommerce-services'
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app]
+          regex: (order|inventory|payment|shipping|notification|saga-coordinator)-service
+          action: keep
+        - source_labels: [__meta_kubernetes_service_port_name]
+          regex: metrics
+          action: keep
+  ```
+
+### Grafana Dashboards
+- Grafana deployed in Kubernetes (see deployments/kubernetes/)
+- Connects to Prometheus as data source
+- Dashboards:
+  - HTTP request rates/latency/errors per service
+  - Saga orchestration step durations and failures
+  - Kafka event throughput and lag
+  - Redis cache hit/miss rates
+  - System health and resource usage
+
+### Verification Steps
+- Access Prometheus: `kubectl port-forward svc/prometheus 9090:9090 -n monitoring`
+- Access Grafana: `kubectl port-forward svc/grafana 3000:3000 -n monitoring`
+- Verify `/metrics` endpoint: `curl http://localhost:8000/metrics`
+- Check dashboards for live metrics and alerts
 
 ---
 
@@ -600,6 +720,30 @@ docker push registry.example.com/order-service:v1.0.0
 
 ### 🚨 Common Issues & Solutions
 
+#### Kafka Connection Issues
+```bash
+# Check Kafka broker status
+kubectl get pods -n e-commerce-saga -l app=kafka
+
+# View Kafka logs
+kubectl logs -n e-commerce-saga -l app=kafka
+
+# Test Kafka connectivity
+make kafka-test
+```
+
+#### Redis Connection Issues
+```bash
+# Check Redis status
+kubectl get pods -n e-commerce-saga -l app=redis
+
+# View Redis logs
+kubectl logs -n e-commerce-saga -l app=redis
+
+# Test Redis connectivity
+make redis-test
+```
+
 #### "Namespace not found" Error
 ```bash
 # Problem: Trying to access services before deployment
@@ -691,6 +835,8 @@ curl http://localhost:8004/        # Notification
 make health         # Verify system health
 make monitor        # Start monitoring
 make analyze        # Review overnight logs
+make kafka-status   # Check Kafka health
+make redis-status   # Check Redis health
 
 # Development workflow
 make test-unit      # Quick tests
@@ -753,6 +899,8 @@ kubectl top nodes
 3. **Run unit tests frequently** for quick feedback: `make test-unit`
 4. **Monitor system behavior** during development: `make monitor`
 5. **Check data consistency** regularly: `make check-consistency`
+6. **Monitor Kafka topics** for event flow: `make kafka-monitor`
+7. **Check Redis cache** performance: `make redis-stats`
 
 ### 🚀 Deployment Best Practices
 
@@ -821,6 +969,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 This E-Commerce Saga System provides:
 
 ✅ **Complete Microservices Architecture** with Saga orchestration  
+✅ **Event-Driven Architecture** with Kafka for service communication  
+✅ **Distributed Caching** with Redis for performance optimization  
 ✅ **Comprehensive Testing Framework** (unit, functional, chaos, performance)  
 ✅ **Production-Ready Deployment** (Docker, Kubernetes, OpenShift)  
 ✅ **Real-Time Monitoring & Observability** with dashboards and alerts  

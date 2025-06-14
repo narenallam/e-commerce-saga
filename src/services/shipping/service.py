@@ -252,3 +252,91 @@ class ShippingService:
             return None
 
         return await self.get_shipping(shipping_id)
+
+    async def get_shipping_statistics(self) -> Dict[str, Any]:
+        """Get shipping statistics"""
+        try:
+            # Count shipments by status
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": "$status",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            status_stats = []
+            async for result in self.db[self.shipments_collection].aggregate(pipeline):
+                status_stats.append(
+                    {
+                        "status": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            # Total shipments count
+            total_shipments = await self.db[self.shipments_collection].count_documents(
+                {}
+            )
+
+            # Recent shipments (last 7 days)
+            seven_days_ago = datetime.now() - timedelta(days=7)
+            recent_shipments = await self.db[self.shipments_collection].count_documents(
+                {"created_at": {"$gte": seven_days_ago}}
+            )
+
+            # Shipping method breakdown
+            method_pipeline = [
+                {
+                    "$group": {
+                        "_id": "$method",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            method_stats = []
+            async for result in self.db[self.shipments_collection].aggregate(
+                method_pipeline
+            ):
+                method_stats.append(
+                    {
+                        "shipping_method": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            # Carrier breakdown
+            carrier_pipeline = [
+                {
+                    "$group": {
+                        "_id": "$carrier",
+                        "count": {"$sum": 1},
+                    }
+                }
+            ]
+
+            carrier_stats = []
+            async for result in self.db[self.shipments_collection].aggregate(
+                carrier_pipeline
+            ):
+                carrier_stats.append(
+                    {
+                        "carrier": result["_id"],
+                        "count": result["count"],
+                    }
+                )
+
+            return {
+                "total_shipments": total_shipments,
+                "recent_shipments_7_days": recent_shipments,
+                "status_breakdown": status_stats,
+                "shipping_method_breakdown": method_stats,
+                "carrier_breakdown": carrier_stats,
+                "generated_at": datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            print(f"Error getting shipping statistics: {str(e)}")
+            return {"error": str(e)}

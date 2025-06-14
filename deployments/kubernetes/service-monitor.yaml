@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: e-commerce-services
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - e-commerce-saga
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: e-commerce-saga
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s 

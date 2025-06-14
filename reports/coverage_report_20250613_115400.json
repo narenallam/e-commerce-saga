@@ -1,0 +1,88 @@
+{
+  "timestamp": "2025-06-13T11:54:00.568608",
+  "overall_score": 88.0,
+  "category_scores": {
+    "api_coverage": 100.0,
+    "performance": 100.0,
+    "test_files": 60.0
+  },
+  "detailed_results": {
+    "api_coverage": {
+      "order": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      },
+      "inventory": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      },
+      "payment": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      },
+      "shipping": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      },
+      "notification": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      },
+      "saga": {
+        "working": 3,
+        "total": 3,
+        "coverage": 100.0,
+        "status": "\u2705"
+      }
+    },
+    "performance": {
+      "order": {
+        "avg_ms": 2.71,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      },
+      "inventory": {
+        "avg_ms": 2.36,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      },
+      "payment": {
+        "avg_ms": 2.03,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      },
+      "shipping": {
+        "avg_ms": 1.84,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      },
+      "notification": {
+        "avg_ms": 1.96,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      },
+      "saga": {
+        "avg_ms": 2.11,
+        "success_rate": 100.0,
+        "status": "\u2705"
+      }
+    },
+    "test_files": {
+      "test_files": 15,
+      "source_files": 25,
+      "coverage": 60.0,
+      "status": "\u2705"
+    }
+  },
+  "status": "\ud83c\udfc6 EXCELLENT"
+}

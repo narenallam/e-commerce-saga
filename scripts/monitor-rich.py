@@ -10,10 +10,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from rich.live import Live
-from rich.layout import Layout
+
 from rich import box
-from rich.align import Align
 from rich.columns import Columns
 
 # Initialize Rich console
@@ -47,15 +45,6 @@ def get_pod_status() -> Tuple[int, int]:
     total_pods = len(pods)
     running_pods = sum(1 for pod in pods if len(pod) > 2 and pod[2] == "Running")
     return running_pods, total_pods
-
-
-def create_header_panel() -> Panel:
-    """Create header panel with timestamp."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header_text = (
-        f"[bold cyan]🕐 REAL-TIME CLUSTER MONITOR[/bold cyan]\n[dim]{timestamp}[/dim]"
-    )
-    return Panel(Align.center(header_text), box=box.DOUBLE)
 
 
 def create_overview_panel(running_pods: int, total_pods: int) -> Panel:
@@ -247,55 +236,46 @@ def create_resources_table() -> Table:
     return table
 
 
-def create_scrollable_layout():
-    """Create a scrollable layout that shows all content properly."""
-    # Don't use Layout for better control over rendering
-    pass
-
-
 def main():
-    """Main monitoring function with scrollable output."""
+    """Main monitoring function with clean scrolling updates."""
+    console.clear()
+
+    # Print header only once at startup
     console.print(
-        "[bold blue]📊 Starting Real-time Kubernetes Cluster Monitoring...[/bold blue]"
+        Panel.fit(
+            "[bold cyan]🕐 REAL-TIME CLUSTER MONITOR[/bold cyan]",
+            box=box.DOUBLE,
+        )
     )
-    console.print("[dim]💡 Press Ctrl+C to stop monitoring[/dim]")
-    time.sleep(2)
+    console.print("[dim]💡 Press Ctrl+C to stop | 🔄 Updates every 5 seconds[/dim]")
+    console.print()
 
     try:
+        update_count = 0
         while True:
-            console.clear()
+            update_count += 1
+            timestamp = datetime.now().strftime("%H:%M:%S")
 
             # Get current status
             running_pods, total_pods = get_pod_status()
 
-            # Header
-            console.print(create_header_panel())
+            # Print update header with timestamp
+            console.print(f"[bold]📊 Update #{update_count} - {timestamp}[/bold]")
             console.print()
 
             # Overview
             console.print(create_overview_panel(running_pods, total_pods))
             console.print()
 
-            # All Pods Table - Full display first
+            # All Pods Table
             console.print(create_pods_table())
             console.print()
 
-            # Create columns layout for bottom tables
-            left_column = [
-                create_deployments_table(),
-            ]
-
-            right_column = [
-                create_services_table(),
-                Text(""),  # Spacer
-                create_resources_table(),
-            ]
-
-            # Print deployment table
+            # Deployment table
             console.print(create_deployments_table())
             console.print()
 
-            # Print service and resource tables side by side
+            # Service and resource tables side by side
             console.print(
                 Columns(
                     [
@@ -307,9 +287,8 @@ def main():
             )
 
             console.print()
-            console.print(
-                "[cyan]⚡ Next update in 5 seconds... Press Ctrl+C to stop[/cyan]"
-            )
+            console.print("[dim]" + "─" * 80 + "[/dim]")  # Separator line
+            console.print()
 
             time.sleep(5)
 
@@ -317,7 +296,7 @@ def main():
         console.print("\n[yellow]👋 Monitoring stopped by user[/yellow]")
         sys.exit(0)
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
+        console.print(f"\n[red]Error: {e}[/red]")
         sys.exit(1)
 
 

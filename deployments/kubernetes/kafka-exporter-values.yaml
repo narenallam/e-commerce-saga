@@ -1,0 +1,24 @@
+env:
+  - name: KAFKA_SERVER
+    value: kafka-metrics.e-commerce-saga.svc.cluster.local:9092
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  interval: 10s
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Add tolerations to ensure the pod can run on Docker Desktop
+tolerations:
+  - effect: NoSchedule
+    operator: Exists
+
+extraArgs:
+  - --kafka.server=$(KAFKA_SERVER) 

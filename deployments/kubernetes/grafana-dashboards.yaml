@@ -1,0 +1,183 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "true"
+data:
+  e-commerce-services.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Service Health Overview",
+          "type": "row",
+          "collapsed": false,
+          "panels": [
+            {
+              "title": "HTTP Request Rate by Service",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "sum(rate(http_requests_total[1m])) by (service)",
+                  "legendFormat": "{{service}}"
+                }
+              ]
+            },
+            {
+              "title": "Error Rate by Service",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "sum(rate(http_requests_total{status_code=~\"5.*\"}[1m])) by (service)",
+                  "legendFormat": "{{service}} errors"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Service Performance",
+          "type": "row",
+          "collapsed": false,
+          "panels": [
+            {
+              "title": "Response Time (95th Percentile)",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "histogram_quantile(0.95, sum(rate(http_request_latency_seconds_bucket[5m])) by (le, service))",
+                  "legendFormat": "{{service}}"
+                }
+              ]
+            },
+            {
+              "title": "Request Duration Distribution",
+              "type": "heatmap",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "sum(rate(http_request_latency_seconds_bucket[5m])) by (le)",
+                  "format": "heatmap"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Redis Metrics",
+          "type": "row",
+          "collapsed": false,
+          "panels": [
+            {
+              "title": "Redis Connected Clients",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "redis_connected_clients",
+                  "legendFormat": "Connected Clients"
+                }
+              ]
+            },
+            {
+              "title": "Redis Memory Usage",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "redis_memory_used_bytes",
+                  "legendFormat": "Memory Used"
+                }
+              ]
+            },
+            {
+              "title": "Redis Command Execution",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "rate(redis_commands_total[1m])",
+                  "legendFormat": "Commands/sec"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "System Resources",
+          "type": "row",
+          "collapsed": false,
+          "panels": [
+            {
+              "title": "CPU Usage by Pod",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"e-commerce-saga\"}[5m])) by (pod)",
+                  "legendFormat": "{{pod}}"
+                }
+              ]
+            },
+            {
+              "title": "Memory Usage by Pod",
+              "type": "graph",
+              "datasource": "Prometheus",
+              "targets": [
+                {
+                  "expr": "sum(container_memory_usage_bytes{namespace=\"e-commerce-saga\"}) by (pod)",
+                  "legendFormat": "{{pod}}"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 16,
+      "style": "dark",
+      "tags": ["e-commerce"],
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "type": "query",
+            "datasource": "Prometheus",
+            "query": "label_values(http_requests_total, service)"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "10s",
+          "30s",
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "2h",
+          "1d"
+        ]
+      },
+      "timezone": "browser",
+      "title": "E-Commerce Services Dashboard",
+      "version": 0
+    } 

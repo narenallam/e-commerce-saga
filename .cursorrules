@@ -1,0 +1,308 @@
+# Project Rules for AI Assistants
+# Place this file as .cursorrules in your project root
+Important Note: Refer changelog folder for activity tracking and history. All changes done by cursor agent, should be documented in changelog folder,
+changelog file format is YYYYMMDD_HHMMSS_{TYPE}_{DESCRIPTION}_{STATUS}.md
+
+## Project Overview
+PROJECT_NAME="E-Commerce Saga System"
+PROJECT_TYPE="Microservices-based distributed e-commerce platform"
+TECH_STACK="FastAPI, MongoDB, Apache Kafka, Kubernetes, Docker, Python asyncio, pytest, Pydantic"
+
+## Architecture Overview
+This is a **microservices-based e-commerce platform** implementing the **saga orchestration pattern** with **event-driven architecture**:
+- **6 services**: Order, Inventory, Payment, Shipping, Notification, Saga Coordinator
+- **Event Streaming**: Apache Kafka with 3-replica high availability for event-driven communication
+- **Production deployment**: Kubernetes with MongoDB and Kafka
+- **Current status**: 65+ unit tests, production-ready distributed transaction management
+- **Distributed transaction management**: Enhanced saga pattern with event sourcing and compensation logic
+- **Data consistency**: Eventual consistency through domain events and cross-service event handlers
+
+## Core Principles
+- Follow saga orchestration pattern for distributed transactions
+- Implement microservices with clear service boundaries
+- Prioritize distributed system reliability and consistency
+- Use async/await for all I/O operations
+- Write comprehensive tests for all business logic
+- Maintain service isolation with well-defined APIs
+- Document all significant changes in changelog/
+
+## Code Style & Standards
+### General
+- Use consistent 4-space indentation for Python
+- Maximum line length: 100 characters
+- Use meaningful commit messages following conventional commits
+- Document complex business logic with clear comments
+- Follow PEP 8 style guide for Python code
+
+### Python-Specific Rules
+- **ALWAYS use async/await** for database operations and service calls
+- Use type hints for all function signatures
+- Prefer Pydantic models for data validation
+- Use descriptive variable and function names
+- Follow established service patterns (see Order Service as reference)
+- Include proper error handling with HTTP status codes
+- Use structured logging with correlation IDs
+
+### API Design Standards
+- **RESTful endpoints**: Use proper HTTP methods (GET, POST, PUT, DELETE)
+- **Consistent response formats**: Use established response models
+- **Health endpoints**: All services must have `/health` endpoint
+- **Statistics endpoints**: Business services must have `/api/{service}/statistics`
+- **Saga integration**: Include saga-compatible endpoints for orchestration
+- Use proper HTTP status codes (200, 201, 400, 404, 500)
+- Implement request/response validation with Pydantic
+
+## File Structure & Organization
+```
+e-commerce-saga/
+├── src/
+│   ├── services/              # Microservices implementation
+│   │   ├── order/            # Order service
+│   │   │   ├── main.py       # FastAPI application with endpoints
+│   │   │   ├── service.py    # Business logic layer
+│   │   │   ├── models.py     # Pydantic models and enums
+│   │   │   └── __init__.py   # Package initialization
+│   │   ├── inventory/        # Inventory service (same structure)
+│   │   ├── payment/          # Payment service (same structure)
+│   │   ├── shipping/         # Shipping service (same structure)
+│   │   └── notification/     # Notification service (same structure)
+│   ├── coordinator/          # Saga coordinator
+│   │   ├── main.py          # Coordinator API
+│   │   ├── order_saga.py    # Order saga implementation
+│   │   └── models.py        # Saga models
+│   └── common/              # Shared utilities
+│       ├── database.py      # Database connection
+│       ├── messaging.py     # Service communication
+│       ├── kafka.py         # Enhanced Kafka client with event-driven patterns
+│       ├── base_consumer.py # Base consumer pattern for all services
+│       ├── config.py        # Centralized configuration with Kafka settings
+│       └── saga.py          # Enhanced saga framework with event sourcing
+├── tests/                   # Test files
+│   ├── test_order_service.py
+│   ├── test_inventory_service.py
+│   ├── test_payment_service.py
+│   ├── test_shipping_service.py
+│   ├── test_notification_service.py
+│   ├── test_saga_coordinator.py
+│   ├── test_kafka_integration.py # Kafka and event-driven architecture tests
+│   └── conftest.py          # Shared test configuration
+├── k8s/                     # Kubernetes manifests
+├── changelog/               # Achievement documentation
+│   ├── templates/
+│   │   └── ACHIEVEMENT_TEMPLATE.md
+│   └── *.md                # Achievement files
+├── Dockerfile               # Service containerization
+├── docker-compose.yml       # Local development
+├── Makefile                # Build and deployment commands
+└── .cursorrules            # This file
+```
+
+## Dependencies & Libraries
+### Core Stack
+- **FastAPI**: Web framework for building APIs
+- **MongoDB**: Document database for persistence
+- **Motor**: Async MongoDB driver for Python
+- **Pydantic**: Data validation and serialization
+- **pytest**: Testing framework
+- **pytest-asyncio**: Async test support
+- **aiohttp**: HTTP client for service communication
+- **uvicorn**: ASGI server for FastAPI
+
+### Infrastructure
+- **Docker**: Containerization
+- **Kubernetes**: Container orchestration
+- **MongoDB**: Database (version 4.4+)
+- **Apache Kafka**: Event streaming platform for event-driven architecture
+
+### Avoid
+- Synchronous database operations (use async/await)
+- Direct service-to-service database access
+- Hardcoded service URLs (use environment variables)
+- Blocking I/O operations in async contexts
+
+## Testing Requirements
+- **Unit tests mandatory** for all services and major functionality
+- **Mock database operations** using AsyncMock in tests
+- **Test both success and failure scenarios**
+- Maintain test coverage above 80% for business logic
+- Use descriptive test names explaining the scenario
+- Follow AAA pattern (Arrange, Act, Assert)
+- Test saga compensation logic thoroughly
+- Verify all API endpoints with integration tests
+
+### Test Patterns
+```python
+@pytest.mark.asyncio
+async def test_feature_success():
+    """Test successful feature operation"""
+    # Arrange: Set up test data and mocks
+    # Act: Execute the functionality
+    # Assert: Verify expected results
+
+@pytest.mark.asyncio
+async def test_feature_failure():
+    """Test error handling scenarios"""
+    # Test failure scenarios and error responses
+```
+
+## Security Guidelines
+- Never commit secrets, API keys, or passwords to repository
+- Use environment variables for all configuration
+- Validate all user inputs using Pydantic models
+- Implement proper error handling without exposing internal details
+- Use correlation IDs for request tracing
+- Implement service-to-service authentication (future enhancement)
+- Follow least privilege principle for database access
+
+## Performance Considerations
+- Use async/await for all I/O operations to avoid blocking
+- Implement database connection pooling
+- Use MongoDB indexes for frequently queried fields
+- Monitor saga execution times and step durations
+- Implement timeout handling for service calls
+- Consider caching for read-heavy operations
+- Log performance metrics for monitoring
+
+## Error Handling
+- Use structured error handling with try/catch blocks
+- Return appropriate HTTP status codes (400, 404, 500, etc.)
+- Log errors with sufficient context and correlation IDs
+- Implement saga compensation for distributed transaction failures
+- Provide meaningful error messages without exposing internals
+- Use circuit breaker pattern for external service calls
+- Implement retry logic with exponential backoff
+
+## Documentation Requirements
+- **CRITICAL**: Document ALL achievements in `changelog/` folder
+- **NEVER DELETE** changelog files - they are permanent history
+- Use `changelog/templates/ACHIEVEMENT_TEMPLATE.md` for new docs
+- Update API documentation with OpenAPI/Swagger
+- Include verification commands in all documentation
+- Document saga flow and compensation logic
+- Maintain service interaction diagrams
+
+## AI Assistant Guidelines
+### When Suggesting Code
+- Always explain the reasoning behind suggestions
+- Provide complete, working examples using established patterns
+- Include error handling and proper HTTP status codes
+- Suggest tests alongside implementation code
+- Consider saga orchestration and compensation logic
+- Follow established service patterns (see Order Service)
+- **NEVER output code to user** - always use edit_file tools
+
+### When Refactoring
+- Explain what improvements are being made
+- Ensure backward compatibility with existing saga flows
+- Update related tests and documentation
+- Consider distributed system implications
+- Maintain API contracts between services
+
+### Debugging Help
+- Ask for relevant error messages and service logs
+- Request minimal reproducible examples
+- Suggest systematic debugging approaches
+- Recommend checking saga coordinator logs
+- Consider service communication failures
+
+## Project-Specific Rules
+
+### Microservices Architecture
+- Maintain clear service boundaries
+- Use established service patterns consistently
+- Implement health endpoints for all services
+- Include statistics endpoints for business services
+- Design for saga orchestration compatibility
+
+### API Design
+- Use RESTful conventions with proper HTTP methods
+- Implement proper HTTP status codes
+- Document with FastAPI/OpenAPI automatic docs
+- Include request/response validation with Pydantic
+- Design saga-compatible endpoints (action + compensation)
+
+### Database Management
+- Use MongoDB with Motor async driver
+- Implement proper error handling for DB operations
+- Follow established collection patterns
+- Use ObjectId for document references
+- Implement proper indexing strategy
+
+### Saga Orchestration
+- Follow established saga patterns
+- Implement compensation logic for all steps
+- Use correlation IDs for request tracking
+- Handle partial failures gracefully
+- Log saga execution details for debugging
+
+### Environment Management
+- Use environment variables for all configuration
+- Support both Docker and local development
+- Maintain separate configs for dev/staging/prod
+- Document required environment variables
+
+### Port Allocation
+- **Services**: 8000-8004 (Order, Inventory, Payment, Shipping, Notification)
+- **Coordinator**: 9000
+- **Metrics**: Service port + 100 (e.g., 8000 → 8100)
+- **Database**: 27017 (MongoDB)
+- **Event Streaming**: 9092 (Kafka), 2181 (Zookeeper)
+
+## Communication & Collaboration
+- Ask clarifying questions when requirements are unclear
+- Suggest alternatives considering distributed system constraints
+- Explain trade-offs in saga orchestration decisions
+- Provide step-by-step instructions for complex setups
+- Consider both happy path and failure scenarios
+
+## Continuous Integration
+- Ensure all tests pass before suggesting completion
+- Run comprehensive test suites (65+ tests)
+- Include service health checks in verification
+- Test saga flows end-to-end with event tracking
+- Verify deployment health after changes
+- Test Kafka integration and event-driven flows
+
+## Monitoring & Logging
+- Implement structured logging with correlation IDs
+- Monitor saga execution times and success rates
+- Set up health checks for all services
+- Log sufficient information for debugging distributed issues
+- Include business metrics in service statistics
+
+## Task Completion Protocol
+### Before Marking Work as "COMPLETED":
+1. ✅ Create changelog documentation using template
+2. ✅ Add comprehensive unit tests (minimum 5 test cases)
+3. ✅ Verify all endpoints with curl commands
+4. ✅ Test both success and failure scenarios
+5. ✅ Document verification steps and expected results
+6. ✅ Update any related configuration files
+
+### Documentation Naming Convention:
+`YYYYMMDD_HHMMSS_{TYPE}_{DESCRIPTION}_{STATUS}.md`
+- **Format**: Date and time prefix followed by type, description, and status
+- **Types**: TASK, SERVICE, SYSTEM, FIX, ENHANCEMENT, DEPLOYMENT
+- **Status**: COMPLETE, ENHANCED, IMPLEMENTED, FIXED, DEPLOYED
+- **Example**: `20250113_182653_ENHANCEMENT_ADVANCED_FEATURES_EVALUATION.md`
+
+---
+
+## Notes for AI Assistants
+- Always consider the distributed system context
+- Reference saga orchestration patterns when making suggestions
+- Prioritize solutions that maintain data consistency
+- Consider the experience level when explaining distributed concepts
+- Document all significant changes in changelog/ folder
+- **NEVER DELETE** files from changelog/ folder - they are permanent history
+
+## Current System Status
+- **Services**: 6 fully implemented (5 business + 1 coordinator) with event-driven architecture
+- **Event Streaming**: Production-ready Apache Kafka with 3-replica high availability
+- **Unit Tests**: 65+ comprehensive tests across all services including Kafka integration
+- **Endpoints**: 25+ production endpoints with full CRUD operations
+- **Features**: Complete saga orchestration with compensation logic and event sourcing
+- **Architecture**: Event-driven asynchronous processing with domain events and CQRS patterns
+- **Deployment**: Production-ready Kubernetes deployment with MongoDB and Kafka
+- **Data Consistency**: Eventual consistency through event-driven patterns and saga compensation
+- **System Health**: All services deployed and healthy with 0 restarts 

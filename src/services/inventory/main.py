@@ -4,11 +4,14 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, Body
 from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
+from prometheus_client import make_asgi_app, Counter, Histogram
+from starlette.middleware.base import BaseHTTPMiddleware
+import time
+
+from pathlib import Path
 
 # Add parent directory to path to import common modules
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from common.database import Database
 from .models import (
@@ -23,6 +26,25 @@ from .service import InventoryService
 
 inventory_service = InventoryService()
 
+REQUEST_COUNT = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status_code"]
+)
+REQUEST_LATENCY = Histogram(
+    "http_request_latency_seconds", "Request latency", ["endpoint"]
+)
+
+
+class PrometheusMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        REQUEST_COUNT.labels(
+            request.method, request.url.path, response.status_code
+        ).inc()
+        REQUEST_LATENCY.labels(request.url.path).observe(process_time)
+        return response
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,6 +54,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Inventory Service", lifespan=lifespan)
+app.add_middleware(PrometheusMiddleware)
+app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/")
@@ -156,6 +180,63 @@ async def update_inventory(product_id: str, update: InventoryUpdateRequest):
         raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
 
     return updated_product
+
+
+@app.get("/api/inventory/statistics")
+async def get_inventory_statistics():
+    """Get inventory statistics and metrics"""
+    try:
+        stats = await inventory_service.get_inventory_statistics()
+        return stats
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving statistics: {str(e)}"
+        )
+
+
+@app.get("/api/inventory/cache/info")
+async def get_cache_info():
+    """Get cache statistics and performance info"""
+    try:
+        if inventory_service.cache_service:
+            cache_info = await inventory_service.cache_service.get_cache_info()
+            return {
+                "cache_status": cache_info,
+                "service": "inventory",
+                "cache_enabled": inventory_service.settings.cache_enabled,
+            }
+        else:
+            return {
+                "cache_status": "disabled",
+                "service": "inventory",
+                "cache_enabled": False,
+            }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving cache info: {str(e)}"
+        )
+
+
+@app.post("/api/inventory/cache/clear")
+async def clear_cache():
+    """Clear all cache entries for inventory service"""
+    try:
+        if inventory_service.cache_service:
+            cleared_count = await inventory_service.cache_service.clear_service_cache()
+            return {
+                "message": f"Cleared {cleared_count} cache entries",
+                "service": "inventory",
+            }
+        else:
+            return {"message": "Cache not enabled", "service": "inventory"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing cache: {str(e)}")
+
+
+@app.get("/metrics")
+async def metrics():
+    """Metrics endpoint for monitoring"""
+    return {"status": "metrics endpoint", "service": "inventory-service"}
 
 
 if __name__ == "__main__":
